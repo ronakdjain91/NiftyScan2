@@ -1,102 +1,41 @@
-import streamlit as st
+# nifty_scanner_app.py
+
 import yfinance as yf
 import pandas as pd
-import ta
+import numpy as np
+import streamlit as st
+from datetime import datetime, timedelta
 
-# -----------------------------------
-# Default Tickers for Nifty indices
-# -----------------------------------
-NIFTY_50 = ["RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY", "HINDUNILVR", "ITC", "KOTAKBANK", "LT", "SBIN"]  # Add all 50
-NIFTY_MIDCAP_50 = ["AUROPHARMA", "BHEL", "BANKBARODA"]  # Add all 50
-NIFTY_SMALLCAP_50 = ["ADANIPOWER", "IIFL", "RBLBANK"]  # Add all 50
+# -------- CONFIG --------
+NIFTY50 = [
+    "RELIANCE.NS","TCS.NS","HDFCBANK.NS","HDFC.NS","INFY.NS","ICICIBANK.NS","KOTAKBANK.NS",
+    "HINDUNILVR.NS","SBIN.NS","LT.NS","AXISBANK.NS","ITC.NS","HCLTECH.NS","BHARTIARTL.NS",
+    "ASIANPAINT.NS","MARUTI.NS","SUNPHARMA.NS","NESTLEIND.NS","TITAN.NS","ULTRACEMCO.NS",
+    "POWERGRID.NS","ONGC.NS","NTPC.NS","INDUSINDBK.NS","BAJAJ-AUTO.NS","BAJFINANCE.NS",
+    "BRITANNIA.NS","DIVISLAB.NS","EICHERMOT.NS","GRASIM.NS","HDFCLIFE.NS","IOC.NS","JSWSTEEL.NS",
+    "WIPRO.NS","TATASTEEL.NS","COALINDIA.NS","SBILIFE.NS","BPCL.NS","ADANIENT.NS",
+    "TECHM.NS","M&M.NS","CIPLA.NS","HEROMOTOCO.NS","INDIGO.NS","SHREECEM.NS","TATAMOTORS.NS",
+    "UPL.NS","HINDALCO.NS"
+]
+NIFTY50 = list(dict.fromkeys(NIFTY50))
+PERIOD = "1y"
+INTERVAL = "1d"
 
-DEFAULT_TICKERS = list(set(NIFTY_50 + NIFTY_MIDCAP_50 + NIFTY_SMALLCAP_50))
+# -------- HELPERS --------
+def sma(series, window):
+    return series.rolling(window=window, min_periods=1).mean()
 
-# -----------------------------------
-# Helper to fetch data
-# -----------------------------------
-def get_stock_data(ticker):
-    try:
-        df = yf.download(f"{ticker}.NS", period="6mo", interval="1d", progress=False)
-        if df.empty:
-            return "error"
-        df["RSI"] = ta.momentum.RSIIndicator(df["Close"]).rsi()
-        macd = ta.trend.MACD(df["Close"])
-        df["MACD"] = macd.macd()
-        df["Signal"] = macd.macd_signal()
-        return df
-    except Exception:
-        return "error"
+def rsi(series, window=14):
+    delta = series.diff()
+    gain = delta.clip(lower=0)
+    loss = -1 * delta.clip(upper=0)
+    avg_gain = gain.ewm(alpha=1/window, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1/window, adjust=False).mean()
+    rs = avg_gain / (avg_loss.replace(0, np.nan))
+    rsi_val = 100 - (100 / (1 + rs))
+    return rsi_val.fillna(50)
 
-# -----------------------------------
-# Buy/Sell Indicator
-# -----------------------------------
-def buy_sell_indicator(df):
-    if isinstance(df, str) and df == "error":
-        return "Error"
-
-    latest_rsi = df["RSI"].iloc[-1]
-    macd_val = df["MACD"].iloc[-1]
-    signal_val = df["Signal"].iloc[-1]
-
-    if latest_rsi < 40 and macd_val > signal_val:
-        return "Buy"
-    elif latest_rsi > 60 and macd_val < signal_val:
-        return "Sell"
-    else:
-        return "Hold"
-
-# -----------------------------------
-# Streamlit UI
-# -----------------------------------
-st.set_page_config(layout="wide")
-st.title("📊 Nifty Stock Scanner")
-
-# Filters
-index_filter = st.selectbox("Select Index", ["All", "Nifty 50", "Nifty Midcap 50", "Nifty Smallcap 50"])
-industry_filter = st.text_input("Filter by Industry (optional)")
-
-# Ticker input
-tickers = st.multiselect("Select Tickers", DEFAULT_TICKERS, default=DEFAULT_TICKERS)
-
-# Apply index filter
-if index_filter == "Nifty 50":
-    tickers = [t for t in tickers if t in NIFTY_50]
-elif index_filter == "Nifty Midcap 50":
-    tickers = [t for t in tickers if t in NIFTY_MIDCAP_50]
-elif index_filter == "Nifty Smallcap 50":
-    tickers = [t for t in tickers if t in NIFTY_SMALLCAP_50]
-
-# Fetch data
-data_list = []
-for t in tickers:
-    df = get_stock_data(t)
-    if df == "error":
-        data_list.append({"Symbol": t, "Overall Rating": "-", "Signal": "Error fetching data from yfinance"})
-    else:
-        signal = buy_sell_indicator(df)
-        overall_rating = "Strong" if signal == "Buy" else "Weak" if signal == "Sell" else "Neutral"
-        data_list.append({
-            "Symbol": t,
-            "Overall Rating": overall_rating,
-            "Signal": signal
-        })
-
-# Create DataFrame
-df_display = pd.DataFrame(data_list)
-
-# Add TradingView clickable link
-df_display["TradingView"] = df_display["Symbol"].apply(
-    lambda x: f'<a href="https://in.tradingview.com/symbols/NSE-{x}/" target="_blank">Chart</a>'
-)
-
-# Apply industry filter (dummy example - you'd need industry mapping)
-if industry_filter:
-    df_display = df_display[df_display["Symbol"].str.contains(industry_filter, case=False)]
-
-# Show table
-st.markdown(df_display.to_html(escape=False, index=False), unsafe_allow_html=True)
-
-# CSV download
-csv = df_display.to_csv(index=False).encode("utf-8")
-st.download_button("Download CSV", csv, "nifty_scan.csv", "text/csv")
+def macd(series, fast=12, slow=26, signal=9):
+    ema_fast = series.ewm(span=fast, adjust=False).mean()
+    ema_slow = series.ewm(span=slow, adjust=False).mean()
+    macd_lin_

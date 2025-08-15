@@ -1,120 +1,100 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-import datetime
-import numpy as np
+import ta
+from io import BytesIO
 
-# -------------------- CONFIG --------------------
 st.set_page_config(page_title="Nifty Scanner", layout="wide")
 
-# Default ticker lists
-nifty_50 = ["RELIANCE.NS","TCS.NS","INFY.NS","HDFCBANK.NS","ICICIBANK.NS"]  # Add all Nifty 50
-nifty_midcap_50 = ["ABB.NS","ALKEM.NS","APLAPOLLO.NS"]  # Add all Midcap 50
-nifty_smallcap_50 = ["ACE.NS","APLLTD.NS","BALAMINES.NS"]  # Add all Smallcap 50
+# --------------------- DEFAULT TICKERS ---------------------
+nifty50 = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS"]
+niftymidcap50 = ["MAXHEALTH.NS", "CUMMINSIND.NS", "TATAELXSI.NS"]
+niftysmallcap50 = ["CENTURYTEX.NS", "GRAPHITE.NS", "NBCC.NS"]
 
-# Merge all
-all_tickers = list(set(nifty_50 + nifty_midcap_50 + nifty_smallcap_50))
+default_tickers = list(set(nifty50 + niftymidcap50 + niftysmallcap50))
 
-# -------------------- FUNCTIONS --------------------
+# --------------------- FETCH DATA ---------------------
 def fetch_data(ticker):
     try:
-        data = yf.download(ticker, period="1y", interval="1d")
-        if data.empty:
+        df = yf.download(ticker, period="6mo", interval="1d")
+        if df.empty:
             return None
-        return data
-    except Exception:
-        return "error"
+        df["RSI"] = ta.momentum.RSIIndicator(df["Close"]).rsi()
+        macd = ta.trend.MACD(df["Close"])
+        df["MACD"] = macd.macd()
+        df["Signal"] = macd.macd_signal()
+        return df
+    except:
+        return None
 
-def calculate_rsi(data, period=14):
-    delta = data['Close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
+# --------------------- FUNDAMENTAL CHECK ---------------------
+def fundamentals_ok(ticker):
+    try:
+        info = yf.Ticker(ticker).info
+        pe = info.get("trailingPE", None)
+        pb = info.get("priceToBook", None)
+        return pe is not None and pb is not None and pe < 30 and pb < 5
+    except:
+        return False
 
-def calculate_macd(data, short=12, long=26, signal=9):
-    short_ema = data['Close'].ewm(span=short, adjust=False).mean()
-    long_ema = data['Close'].ewm(span=long, adjust=False).mean()
-    macd = short_ema - long_ema
-    signal_line = macd.ewm(span=signal, adjust=False).mean()
-    return macd, signal_line
-
-def buy_sell_indicator(data):
-    rsi = calculate_rsi(data)
-    macd, signal_line = calculate_macd(data)
-
-    latest_rsi = rsi.iloc[-1]
-    latest_macd = macd.iloc[-1]
-    latest_signal = signal_line.iloc[-1]
-
-    # Fundamentals placeholder
-    fundamentals_ok = True  # In real app, fetch actual fundamentals
-
-    # Conditions
-    rsi_condition = 40 < latest_rsi < 60
-    macd_condition = latest_macd > latest_signal
-    rating = 0
-
-    if fundamentals_ok:
-        rating += 1
-    if rsi_condition:
-        rating += 1
-    if macd_condition:
-        rating += 1
-
-    if rating == 3:
-        return "BUY", rating
-    elif rating == 2:
-        return "HOLD", rating
+# --------------------- BUY/SELL INDICATOR ---------------------
+def buy_sell_indicator(df, fundamentals_pass):
+    latest = df.iloc[-1]
+    rsi_condition = 40 < latest["RSI"] < 60
+    macd_condition = latest["MACD"] > latest["Signal"]
+    if fundamentals_pass and rsi_condition and macd_condition:
+        return "BUY"
+    elif not fundamentals_pass and (latest["RSI"] > 70 or latest["MACD"] < latest["Signal"]):
+        return "SELL"
     else:
-        return "SELL", rating
+        return "HOLD"
 
-# -------------------- UI --------------------
-st.title("📊 Nifty Stock Scanner (Mid-Term)")
+# --------------------- UI ---------------------
+st.title("📊 Nifty Scanner")
 
 # Filters
-index_filter = st.selectbox("Select Index", ["All", "Nifty 50", "Midcap 50", "Smallcap 50"])
-industry_filter = st.text_input("Filter by Industry (optional)")
+index_filter = st.selectbox("Select Index", ["All", "Nifty 50", "Nifty Midcap 50", "Nifty Smallcap 50"])
+industry_filter = st.text_input("Filter by Industry (optional)").strip().lower()
+
+# Add/Remove Tickers
+user_tickers = st.text_area("Add your own tickers (comma separated)", value=",".join(default_tickers))
+tickers = [t.strip().upper() for t in user_tickers.split(",") if t.strip()]
 
 if index_filter == "Nifty 50":
-    tickers = nifty_50
-elif index_filter == "Midcap 50":
-    tickers = nifty_midcap_50
-elif index_filter == "Smallcap 50":
-    tickers = nifty_smallcap_50
-else:
-    tickers = all_tickers
+    tickers = [t for t in tickers if t in nifty50]
+elif index_filter == "Nifty Midcap 50":
+    tickers = [t for t in tickers if t in niftymidcap50]
+elif index_filter == "Nifty Smallcap 50":
+    tickers = [t for t in tickers if t in niftysmallcap50]
 
-final_data = []
-
+# --------------------- PROCESS DATA ---------------------
+results = []
 for ticker in tickers:
-    data = fetch_data(ticker)
-    if data == "error":
-        st.warning(f"⚠ Error fetching data from yfinance for {ticker}")
+    df = fetch_data(ticker)
+    if df is None:
+        st.warning(f"⚠ Error fetching data for {ticker} from yfinance.")
         continue
-    if data is None:
+    fund_pass = fundamentals_ok(ticker)
+    signal = buy_sell_indicator(df, fund_pass)
+    overall_rating = "Strong" if signal == "BUY" else "Weak" if signal == "SELL" else "Neutral"
+    industry = "Unknown"  # Can fetch if you have mapping
+    if industry_filter and industry_filter not in industry.lower():
         continue
-
-    signal, rating = buy_sell_indicator(data)
-    industry = "Unknown"  # Placeholder — add real industry mapping
-
-    if industry_filter and industry_filter.lower() not in industry.lower():
-        continue
-
-    final_data.append({
+    results.append({
         "Ticker": ticker,
+        "Industry": industry,
         "Signal": signal,
-        "Rating": rating,
-        "TradingView": f"[Chart](https://www.tradingview.com/symbols/{ticker.replace('.NS','')}/)",
-        "Industry": industry
+        "Overall Rating": overall_rating,
+        "TradingView": f"[View Chart](https://www.tradingview.com/chart/?symbol={ticker})"
     })
 
-if final_data:
-    df = pd.DataFrame(final_data)
-    st.dataframe(df, use_container_width=True)
+# --------------------- DISPLAY ---------------------
+if results:
+    df_display = pd.DataFrame(results)
+    st.write(df_display.to_markdown(index=False), unsafe_allow_html=True)
 
-    # CSV download
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button(label="📥 Download CSV", data=csv, file_name="nifty_scan.csv", mime='text/csv')
+    # CSV Download
+    csv = df_display.to_csv(index=False).encode("utf-8")
+    st.download_button("📥 Download CSV", data=csv, file_name="nifty_scan.csv", mime="text/csv")
 else:
-    st.error("No data found for the selected filters.")
+    st.info("No data to display. Adjust filters or tickers.")

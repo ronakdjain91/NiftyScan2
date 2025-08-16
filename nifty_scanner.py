@@ -94,6 +94,26 @@ def technicals_score(df):
     max_score = 5
     price = close.iloc[-1]
 
+    # --- Signals ---
+    sma_signal = "Hold"
+    if s50.iloc[-1] > s200.iloc[-1]:
+        sma_signal = "Buy"
+    elif s50.iloc[-1] < s200.iloc[-1]:
+        sma_signal = "Sell"
+
+    rsi_signal = "Hold"
+    if rsi_val < 30:
+        rsi_signal = "Buy"
+    elif rsi_val > 70:
+        rsi_signal = "Sell"
+
+    macd_signal = "Hold"
+    if macd_hist > 0:
+        macd_signal = "Buy"
+    elif macd_hist < 0:
+        macd_signal = "Sell"
+
+    # --- Score logic ---
     if price > s200.iloc[-1]:
         score += 2
     elif price > s50.iloc[-1]:
@@ -115,7 +135,10 @@ def technicals_score(df):
         "s50": s50.iloc[-1],
         "s200": s200.iloc[-1],
         "rsi": float(rsi_val),
-        "macd_hist": float(macd_hist)
+        "macd_hist": float(macd_hist),
+        "SMA Signal": sma_signal,
+        "RSI Signal": rsi_signal,
+        "MACD Signal": macd_signal
     }
 
 def recommend(fund_score, fund_max, tech_score, tech_max, fund_threshold=2.5):
@@ -153,6 +176,9 @@ def scan_universe(ticker_list):
                 "Price": round(tmeta["price"], 2),
                 "Fundamental Score": fscore,
                 "Technical Score": tscore,
+                "SMA Signal": tmeta["SMA Signal"],
+                "RSI Signal": tmeta["RSI Signal"],
+                "MACD Signal": tmeta["MACD Signal"],
                 "Final Score": round(final_score, 3),
                 "Recommendation": rec,
                 "TradingView": f'<a href="{tradingview_link}" target="_blank">View</a>'

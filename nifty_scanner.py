@@ -160,9 +160,6 @@ st.markdown("""
 4.  Run `pip install -r requirements.txt` to install the libraries.
 5.  Run `streamlit run app.py` to launch the web app.
 """)
-The video below provides a visual walkthrough of building a stock dashboard using Python and Streamlit, which can serve as a great reference for this project.
 
-[Python - Stock Dashboards with YFinance and Streamlit](https://www.youtube.com/watch?v=GSDdb0CDsR8)
-http://googleusercontent.com/youtube_content/1 *YouTube video views will be stored in your YouTube History, and your data will be stored and used by YouTube according to its [Terms of Service](https://www.youtube.com/static?template=terms)*
 
 

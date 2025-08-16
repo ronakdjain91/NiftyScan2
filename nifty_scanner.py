@@ -29,7 +29,7 @@ def apply_technical_indicators(df):
     Applies a suite of technical indicators to the dataframe, 
     with added robustness checks.
     """
-    # Robust check to ensure df is a valid DataFrame and has 'Close' column
+    # Robust check to ensure df is a valid DataFrame and has a 'Close' column
     if not isinstance(df, pd.DataFrame) or 'Close' not in df.columns or df['Close'].empty:
         return None
     

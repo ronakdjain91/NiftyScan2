@@ -25,12 +25,28 @@ def get_stock_data(ticker, start_date, end_date):
         return None
 
 def apply_technical_indicators(df):
-    """Applies a suite of technical indicators to the dataframe."""
-    df['SMA_50'] = ta.trend.sma_indicator(df['Close'], window=50)
-    df['SMA_200'] = ta.trend.sma_indicator(df['Close'], window=200)
-    df['RSI'] = ta.momentum.rsi(df['Close'], window=14)
-    df['MACD'] = ta.trend.macd(df['Close'])
-    df['MACD_Signal'] = ta.trend.macd_signal(df['Close'])
+    """
+    Applies a suite of technical indicators to the dataframe, 
+    with added robustness checks.
+    """
+    # Ensure 'Close' column exists and is not empty
+    if 'Close' not in df.columns or df['Close'].empty:
+        return df
+    
+    # Explicitly convert 'Close' column to numeric
+    # The 'errors=coerce' option will turn non-numeric values into NaN
+    df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
+    
+    try:
+        df['SMA_50'] = ta.trend.sma_indicator(df['Close'], window=50)
+        df['SMA_200'] = ta.trend.sma_indicator(df['Close'], window=200)
+        df['RSI'] = ta.momentum.rsi(df['Close'], window=14)
+        df['MACD'] = ta.trend.macd(df['Close'])
+        df['MACD_Signal'] = ta.trend.macd_signal(df['Close'])
+    except Exception as e:
+        st.error(f"Failed to apply technical indicators. Error: {e}")
+        return None
+        
     return df
 
 def analyze_stock(df, ticker):
@@ -112,9 +128,10 @@ with tab1:
             data = get_stock_data(ticker, start_date, end_date)
             if data is not None and not data.empty:
                 data = apply_technical_indicators(data)
-                analysis = analyze_stock(data, ticker)
-                if analysis['signal'] != 'HOLD' and analysis['signal'] != 'N/A':
-                    recommendations.append(analysis)
+                if data is not None:
+                    analysis = analyze_stock(data, ticker)
+                    if analysis['signal'] != 'HOLD' and analysis['signal'] != 'N/A':
+                        recommendations.append(analysis)
     
     if recommendations:
         rec_df = pd.DataFrame(recommendations)
@@ -134,21 +151,22 @@ with tab2:
             data = apply_technical_indicators(data)
             
             # Display Candlestick Chart
-            fig = create_candlestick_chart(data, selected_ticker)
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Display Key Metrics
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Current Price", f"${data['Close'].iloc[-1]:.2f}")
-            with col2:
-                st.metric("RSI", f"{data['RSI'].iloc[-1]:.2f}", delta=f"{data['RSI'].iloc[-1] - data['RSI'].iloc[-2]:.2f}")
-            with col3:
-                st.metric("MACD", f"{data['MACD'].iloc[-1]:.2f}")
-            
-            # Display recent data in a table
-            st.markdown("### Recent Technical Data")
-            st.dataframe(data[['Close', 'Volume', 'SMA_50', 'SMA_200', 'RSI', 'MACD']].tail(10).round(2), use_container_width=True)
+            if data is not None:
+                fig = create_candlestick_chart(data, selected_ticker)
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Display Key Metrics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Current Price", f"${data['Close'].iloc[-1]:.2f}")
+                with col2:
+                    st.metric("RSI", f"{data['RSI'].iloc[-1]:.2f}", delta=f"{data['RSI'].iloc[-1] - data['RSI'].iloc[-2]:.2f}")
+                with col3:
+                    st.metric("MACD", f"{data['MACD'].iloc[-1]:.2f}")
+                
+                # Display recent data in a table
+                st.markdown("### Recent Technical Data")
+                st.dataframe(data[['Close', 'Volume', 'SMA_50', 'SMA_200', 'RSI', 'MACD']].tail(10).round(2), use_container_width=True)
 
 # --- How to Run the App ---
 st.markdown("---")
@@ -160,6 +178,3 @@ st.markdown("""
 4.  Run `pip install -r requirements.txt` to install the libraries.
 5.  Run `streamlit run app.py` to launch the web app.
 """)
-
-
-

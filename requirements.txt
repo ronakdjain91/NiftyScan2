@@ -1,5 +1,7 @@
-streamlit
-pandas
-yfinance
-plotly
-ta
+streamlit==1.28.1
+yfinance==0.2.18
+pandas==2.0.3
+numpy==1.24.3
+plotly==5.17.0
+datetime
+warnings

@@ -10,8 +10,8 @@ warnings.filterwarnings('ignore')
 
 # Page configuration
 st.set_page_config(
-    page_title="AI Stock Screener",
-    page_icon="📈",
+    page_title="AI Nifty Stock Screener",
+    page_icon="🇮🇳",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -205,7 +205,9 @@ class StockScreener:
     
     def create_tradingview_link(self, symbol):
         """Create TradingView clickable link"""
-        return f"https://www.tradingview.com/chart/?symbol={symbol}"
+        # Remove .NS suffix for TradingView link
+        clean_symbol = symbol.replace('.NS', '')
+        return f"https://www.tradingview.com/chart/?symbol=NSE%3A{clean_symbol}"
     
     def screen_stocks(self, tickers, filters):
         """Main screening function"""
@@ -306,7 +308,7 @@ def main():
     
     # Fundamental filters
     st.sidebar.subheader("💰 Fundamental Filters")
-    min_market_cap = st.sidebar.number_input("Min Market Cap (Billions)", min_value=0.0, value=1.0, step=0.5)
+    min_market_cap = st.sidebar.number_input("Min Market Cap (Billions ₹)", min_value=0.0, value=10.0, step=5.0)
     max_pe = st.sidebar.number_input("Max P/E Ratio (0 = no limit)", min_value=0.0, value=30.0, step=1.0)
     min_roe = st.sidebar.number_input("Min ROE (%)", min_value=0.0, value=10.0, step=1.0)
     
@@ -357,13 +359,13 @@ def main():
                     with st.expander(f"{stock['Symbol']} - Score: {stock['Score']:.1f}"):
                         col1, col2 = st.columns(2)
                         with col1:
-                        st.metric("Current Price", f"₹{stock['Current Price']:.2f}")
+                            st.metric("Current Price", f"₹{stock['Current Price']:.2f}")
                             st.metric("RSI", f"{stock['RSI']:.1f}")
                             st.metric("P/E Ratio", f"{stock['P/E Ratio']:.1f}")
                         with col2:
                             st.metric("ROE", f"{stock['ROE']:.1f}%")
                             st.metric("Revenue Growth", f"{stock['Revenue Growth']:.1f}%")
-                        st.metric("Market Cap", f"₹{stock['Market Cap']/1e9:.1f}B")
+                            st.metric("Market Cap", f"₹{stock['Market Cap']/1e9:.1f}B")
                         
                         st.write("**Key Signals:**", stock['Signals'])
                         st.markdown(f"[📈 View on TradingView]({stock['TradingView']})")
@@ -375,7 +377,7 @@ def main():
                     with st.expander(f"{stock['Symbol']} - Score: {stock['Score']:.1f}"):
                         col1, col2 = st.columns(2)
                         with col1:
-                        st.metric("Current Price", f"₹{stock['Current Price']:.2f}")
+                            st.metric("Current Price", f"₹{stock['Current Price']:.2f}")
                             st.metric("RSI", f"{stock['RSI']:.1f}")
                             st.metric("P/E Ratio", f"{stock['P/E Ratio']:.1f}")
                         with col2:
@@ -391,7 +393,7 @@ def main():
             st.download_button(
                 label="📥 Download Results as CSV",
                 data=csv,
-                file_name=f"stock_screener_results_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                file_name=f"nifty_screener_results_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                 mime="text/csv"
             )
             
@@ -401,7 +403,7 @@ def main():
     # Information section
     st.header("ℹ️ How It Works")
     st.markdown("""
-    This AI-powered stock screener analyzes stocks using:
+    This AI-powered stock screener analyzes Nifty stocks using:
     
     **Technical Analysis (40% weight):**
     - Moving averages (20, 50, 200-day)
@@ -422,6 +424,17 @@ def main():
     - Generates scores from -100 to +100
     - Only shows definitive BUY (score ≥30) or SELL (score ≤-20) recommendations
     - Filters out neutral/hold positions for clear actionable insights
+    
+    **Stock Universe Options:**
+    - **Nifty 50 Sample:** Pre-loaded with 50 major NSE stocks
+    - **Custom Tickers:** Enter your own NSE stock symbols (remember to add .NS suffix)
+    
+    **Features:**
+    - Real-time NSE data via Yahoo Finance
+    - Indian Rupee (₹) pricing display
+    - TradingView integration with NSE symbols
+    - Comprehensive filtering options
+    - Downloadable CSV results
     """)
 
 if __name__ == "__main__":

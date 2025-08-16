@@ -29,26 +29,29 @@ def apply_technical_indicators(df):
     Applies a suite of technical indicators to the dataframe, 
     with added robustness checks.
     """
-    # Ensure 'Close' column exists and is not empty
-    if 'Close' not in df.columns or df['Close'].empty:
-        return df
-    
-    # Explicitly convert 'Close' column to numeric
-    # The 'errors=coerce' option will turn non-numeric values into NaN
-    df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
+    # Robust check to ensure df is a valid DataFrame and has 'Close' column
+    if not isinstance(df, pd.DataFrame) or 'Close' not in df.columns or df['Close'].empty:
+        return None
     
     try:
-        df['SMA_50'] = ta.trend.sma_indicator(df['Close'], window=50)
-        df['SMA_200'] = ta.trend.sma_indicator(df['Close'], window=200)
-        df['RSI'] = ta.momentum.rsi(df['Close'], window=14)
-        df['MACD'] = ta.trend.macd(df['Close'])
-        df['MACD_Signal'] = ta.trend.macd_signal(df['Close'])
+        # The .copy() ensures that we are not modifying the original DataFrame
+        df_copy = df.copy() 
+        
+        # Explicitly convert 'Close' column to numeric, which can handle strings
+        df_copy['Close'] = pd.to_numeric(df_copy['Close'], errors='coerce')
+        
+        # Now apply the indicators
+        df_copy['SMA_50'] = ta.trend.sma_indicator(df_copy['Close'], window=50)
+        df_copy['SMA_200'] = ta.trend.sma_indicator(df_copy['Close'], window=200)
+        df_copy['RSI'] = ta.momentum.rsi(df_copy['Close'], window=14)
+        df_copy['MACD'] = ta.trend.macd(df_copy['Close'])
+        df_copy['MACD_Signal'] = ta.trend.macd_signal(df_copy['Close'])
+
+        return df_copy
     except Exception as e:
         st.error(f"Failed to apply technical indicators. Error: {e}")
         return None
         
-    return df
-
 def analyze_stock(df, ticker):
     """Generates a buy/sell signal based on technical analysis."""
     if df is None or len(df) < 200:
@@ -56,14 +59,12 @@ def analyze_stock(df, ticker):
     
     last_row = df.iloc[-1]
     
-    # Check for Buy Signal: Bullish 50/200 MA Crossover + RSI in a healthy range
     buy_condition = (
         last_row['SMA_50'] > last_row['SMA_200'] and
         df.iloc[-2]['SMA_50'] <= df.iloc[-2]['SMA_200'] and
         30 < last_row['RSI'] < 70
     )
     
-    # Check for Sell Signal: Bearish 50/200 MA Crossover
     sell_condition = (
         last_row['SMA_50'] < last_row['SMA_200'] and
         df.iloc[-2]['SMA_50'] >= df.iloc[-2]['SMA_200']
@@ -87,11 +88,9 @@ def create_candlestick_chart(df, ticker):
         name="Candlestick"
     )])
     
-    # Add Moving Averages
     fig.add_trace(go.Scatter(x=df.index, y=df['SMA_50'], mode='lines', name='SMA 50', line=dict(color='orange', width=2)))
     fig.add_trace(go.Scatter(x=df.index, y=df['SMA_200'], mode='lines', name='SMA 200', line=dict(color='purple', width=2)))
 
-    # Customize Layout
     fig.update_layout(
         title=f"<b>{ticker}</b> Candlestick Chart",
         title_x=0.5,
@@ -111,7 +110,6 @@ with st.sidebar:
     ticker_input = st.text_input("Enter Ticker Symbols (e.g., AAPL, MSFT, GOOG)", "AAPL, MSFT, GOOG")
     tickers = [t.strip().upper() for t in ticker_input.split(',')]
     
-    # Date range selector
     today = date.today()
     start_date = st.date_input("Start Date", today - timedelta(days=365))
     end_date = st.date_input("End Date", today)
@@ -150,12 +148,10 @@ with tab2:
         if data is not None and not data.empty:
             data = apply_technical_indicators(data)
             
-            # Display Candlestick Chart
             if data is not None:
                 fig = create_candlestick_chart(data, selected_ticker)
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # Display Key Metrics
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.metric("Current Price", f"${data['Close'].iloc[-1]:.2f}")
@@ -164,7 +160,6 @@ with tab2:
                 with col3:
                     st.metric("MACD", f"{data['MACD'].iloc[-1]:.2f}")
                 
-                # Display recent data in a table
                 st.markdown("### Recent Technical Data")
                 st.dataframe(data[['Close', 'Volume', 'SMA_50', 'SMA_200', 'RSI', 'MACD']].tail(10).round(2), use_container_width=True)
 
